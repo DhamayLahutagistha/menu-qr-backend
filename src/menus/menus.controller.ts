@@ -2,19 +2,22 @@
 import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes, ApiResponse, ApiBody } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { extname } from 'path';
+import { memoryStorage } from 'multer';
 import { MenusService } from './menus.service';
 import { CreateMenuItemDto, UpdateMenuItemDto } from './dto/menu-item.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { CloudinaryService } from '../upload/cloudinary.service';
 
 @ApiTags('Menu Items')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller()
 export class MenusController {
-  constructor(private menusService: MenusService) {}
+  constructor(
+    private menusService: MenusService,
+    private cloudinaryService: CloudinaryService,
+  ) {}
 
   @Get('categories/:categoryId/items')
   @ApiOperation({ summary: 'Lihat semua menu item dalam kategori' })
@@ -43,24 +46,19 @@ export class MenusController {
   }
 
   @Post('menu-items/:id/image')
-  @ApiOperation({ summary: '[OWNER] Upload foto menu item' })
+  @ApiOperation({ summary: '[OWNER] Upload foto menu item ke Cloudinary' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
       type: 'object',
-      properties: {
-        image: { type: 'string', format: 'binary' },
-      },
+      properties: { image: { type: 'string', format: 'binary' } },
     },
   })
-  @ApiResponse({ status: 201, description: 'Foto menu item berhasil diupload' })
+  @ApiResponse({ status: 201, description: 'Foto berhasil diupload ke Cloudinary' })
   @ApiResponse({ status: 403, description: 'Bukan owner toko ini' })
   @ApiResponse({ status: 404, description: 'Menu item tidak ditemukan' })
   @UseInterceptors(FileInterceptor('image', {
-    storage: diskStorage({
-      destination: './uploads/menus',
-      filename: (req, file, cb) => cb(null, `${Date.now()}${extname(file.originalname)}`),
-    }),
+    storage: memoryStorage(),
     fileFilter: (req, file, cb) => {
       if (!file.mimetype.match(/\/(jpg|jpeg|png|webp)$/)) {
         return cb(new Error('Hanya file gambar yang diizinkan'), false);
@@ -69,8 +67,8 @@ export class MenusController {
     },
     limits: { fileSize: 5 * 1024 * 1024 },
   }))
-  uploadImage(@Param('id') id: string, @UploadedFile() file: Express.Multer.File, @CurrentUser() user: any) {
-    const imageUrl = `/uploads/menus/${file.filename}`;
+  async uploadImage(@Param('id') id: string, @UploadedFile() file: Express.Multer.File, @CurrentUser() user: any) {
+    const imageUrl = await this.cloudinaryService.uploadImage(file, 'menu-qr/menus');
     return this.menusService.updateImage(id, imageUrl, user.id, user.role);
   }
 

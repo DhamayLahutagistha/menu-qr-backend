@@ -2,15 +2,17 @@
 import { Controller, Post, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes, ApiBody, ApiResponse } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { extname } from 'path';
+import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { CloudinaryService } from './cloudinary.service';
 
 @ApiTags('Upload')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('upload')
 export class UploadController {
+  constructor(private cloudinaryService: CloudinaryService) {}
+
   @Post('image')
   @ApiOperation({ summary: 'Upload gambar umum (logo toko, dll)' })
   @ApiConsumes('multipart/form-data')
@@ -20,14 +22,11 @@ export class UploadController {
       properties: { image: { type: 'string', format: 'binary' } },
     },
   })
-  @ApiResponse({ status: 201, description: 'Gambar berhasil diupload' })
+  @ApiResponse({ status: 201, description: 'Gambar berhasil diupload, URL Cloudinary dikembalikan' })
   @ApiResponse({ status: 400, description: 'Format file tidak didukung' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 401, description: 'Belum login' })
   @UseInterceptors(FileInterceptor('image', {
-    storage: diskStorage({
-      destination: './uploads/general',
-      filename: (req, file, cb) => cb(null, `${Date.now()}${extname(file.originalname)}`),
-    }),
+    storage: memoryStorage(),
     fileFilter: (req, file, cb) => {
       if (!file.mimetype.match(/\/(jpg|jpeg|png|webp)$/)) {
         return cb(new Error('Hanya file gambar (jpg, jpeg, png, webp)'), false);
@@ -36,10 +35,11 @@ export class UploadController {
     },
     limits: { fileSize: 5 * 1024 * 1024 },
   }))
-  uploadImage(@UploadedFile() file: Express.Multer.File) {
+  async uploadImage(@UploadedFile() file: Express.Multer.File) {
+    const url = await this.cloudinaryService.uploadImage(file, 'menu-qr/general');
     return {
       message: 'Upload berhasil',
-      url: `/uploads/general/${file.filename}`,
+      url,
       originalName: file.originalname,
       size: file.size,
     };
