@@ -294,3 +294,5 @@ PATCH /api/orders/{orderId}/status
 5. Tambah di start command: `npm run prisma:deploy && npm run start`
 
 Railway otomatis deploy setiap push ke GitHub.
+
+url : https://menu-qr-backend-production.up.railway.app/docs
